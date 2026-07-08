@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+
 import {
   Calendar,
   ChevronLeft,
@@ -104,15 +106,23 @@ export function ChildDetailClient({
   const [isSubmittingEvent, setIsSubmittingEvent] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
 
+  const router = useRouter();
+
   // Form States for Event Modal
   const [eventType, setEventType] = useState<EventType>("repas");
   const [note, setNote] = useState("");
   const [mealQuality, setMealQuality] = useState("bien");
+  const [mealMoment, setMealMoment] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [activityLabel, setActivityLabel] = useState("");
   const [medicationName, setMedicationName] = useState("");
+  const [medicationDose, setMedicationDose] = useState("");
+  const [medicationTime, setMedicationTime] = useState("");
+  const [medicationConfirmed, setMedicationConfirmed] = useState(false);
   const [severity, setSeverity] = useState("mineur");
+  const [incidentType, setIncidentType] = useState("");
+
 
   // Fetch events when date changes
   useEffect(() => {
@@ -199,6 +209,19 @@ export function ChildDetailClient({
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Client-side block for medication authorization
+    if (eventType === "medicament") {
+      if (!child.medication_authorization) {
+        alert("Enregistrement impossible : L'administration de médicaments n'est pas autorisée par les parents.");
+        return;
+      }
+      if (!medicationConfirmed) {
+        alert("Veuillez confirmer l'autorisation parentale.");
+        return;
+      }
+    }
+
     setIsSubmittingEvent(true);
     try {
       // Format times if present
@@ -218,10 +241,24 @@ export function ChildDetailClient({
         endIso = d.toISOString();
       }
 
-      await createEventAction({
+      // Format details into note
+      let finalNote = note;
+      if (eventType === "repas") {
+        finalNote = mealMoment ? `[${mealMoment}] ${note}`.trim() : note;
+      } else if (eventType === "medicament") {
+        const extraDetails = [
+          medicationDose ? `Dose: ${medicationDose}` : null,
+          medicationTime ? `Heure: ${medicationTime}` : null
+        ].filter(Boolean).join(", ");
+        finalNote = extraDetails ? `${extraDetails}${note ? ` - ${note}` : ""}` : note;
+      } else if (eventType === "incident") {
+        finalNote = incidentType ? `[Type: ${incidentType}] ${note}`.trim() : note;
+      }
+
+      const result = await createEventAction({
         child_id: child.id,
         event_type: eventType,
-        note,
+        note: finalNote,
         meal_quality: eventType === "repas" ? mealQuality : undefined,
         start_time: eventType === "sieste" ? startIso : undefined,
         end_time: eventType === "sieste" ? endIso : undefined,
@@ -230,21 +267,32 @@ export function ChildDetailClient({
         severity: eventType === "incident" ? severity : undefined,
       });
 
+      if (!result.success) {
+        if (result.status === 403) {
+          alert("403: Enregistrement refusé par le serveur car l'autorisation parentale est manquante.");
+          return;
+        }
+        throw new Error(result.error || "Erreur de création de l'événement.");
+      }
+
       // Clear form
       setNote("");
       setMealQuality("bien");
+      setMealMoment("");
       setStartTime("");
       setEndTime("");
       setActivityLabel("");
       setMedicationName("");
+      setMedicationDose("");
+      setMedicationTime("");
+      setMedicationConfirmed(false);
       setSeverity("mineur");
+      setIncidentType("");
       setIsModalOpen(false);
 
-      // Trigger refresh of events by updating selectedDate to trigger the useEffect
-      setSelectedDate((prev) => {
-        // Just re-assign same value to trigger state effect
-        return `${prev}`;
-      });
+      // Redirect to the child's profile page and refresh the Router Cache
+      router.push(`/staff/children/${child.id}`);
+      router.refresh();
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Impossible de créer l'événement.");
@@ -743,29 +791,43 @@ export function ChildDetailClient({
 
               {/* Conditional Fields based on Event Type */}
               {eventType === "repas" && (
-                <div className="space-y-2 p-3 bg-muted/40 rounded-xl border border-border">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                    Appétit / Qualité du repas
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { val: "bien", label: "Bien mangé 🍽️" },
-                      { val: "moyen", label: "Moyen 🥪" },
-                      { val: "peu", label: "Peu mangé 🥛" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.val}
-                        type="button"
-                        onClick={() => setMealQuality(opt.val)}
-                        className={`py-2 px-3 text-xs font-semibold rounded-lg border text-center transition-all ${
-                          mealQuality === opt.val
-                            ? "bg-emerald-100 border-emerald-300 text-emerald-800"
-                            : "bg-background border-border text-muted-foreground hover:bg-muted"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                <div className="space-y-3 p-3 bg-muted/40 rounded-xl border border-border">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                      Appétit / Qualité du repas
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { val: "bien", label: "Bien mangé 🍽️" },
+                        { val: "moyen", label: "Moyen 🥪" },
+                        { val: "peu", label: "Peu mangé 🥛" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.val}
+                          type="button"
+                          onClick={() => setMealQuality(opt.val)}
+                          className={`py-2 px-3 text-xs font-semibold rounded-lg border text-center transition-all ${
+                            mealQuality === opt.val
+                              ? "bg-emerald-100 border-emerald-300 text-emerald-800"
+                              : "bg-background border-border text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Moment du repas (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ex: Goûter, Déjeuner, Repas du matin..."
+                      value={mealMoment}
+                      onChange={(e) => setMealMoment(e.target.value)}
+                      className="w-full text-sm h-9 border border-input rounded-lg px-2.5 outline-none bg-background focus:border-ring"
+                    />
                   </div>
                 </div>
               )}
@@ -826,13 +888,54 @@ export function ChildDetailClient({
                       value={medicationName}
                       onChange={(e) => setMedicationName(e.target.value)}
                       className="w-full text-sm h-9 border border-input rounded-lg px-2.5 outline-none bg-background focus:border-ring"
+                      disabled={!child.medication_authorization}
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        Dose (optionnel)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="ex: 1 pipette, 5ml..."
+                        value={medicationDose}
+                        onChange={(e) => setMedicationDose(e.target.value)}
+                        className="w-full text-sm h-9 border border-input rounded-lg px-2.5 outline-none bg-background focus:border-ring"
+                        disabled={!child.medication_authorization}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        Heure d'administration (optionnel)
+                      </label>
+                      <input
+                        type="time"
+                        value={medicationTime}
+                        onChange={(e) => setMedicationTime(e.target.value)}
+                        className="w-full text-sm h-9 border border-input rounded-lg px-2.5 outline-none bg-background focus:border-ring"
+                        disabled={!child.medication_authorization}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 p-2.5 bg-background rounded-lg border border-border">
+                    <input
+                      type="checkbox"
+                      id="medicationConfirmed"
+                      checked={medicationConfirmed}
+                      onChange={(e) => setMedicationConfirmed(e.target.checked)}
+                      className="size-4 rounded border-gray-300 text-soleil-primary focus:ring-soleil-primary cursor-pointer"
+                      disabled={!child.medication_authorization}
+                    />
+                    <label htmlFor="medicationConfirmed" className="text-xs font-bold text-soleil-text cursor-pointer select-none">
+                      Autorisation parentale confirmée
+                    </label>
                   </div>
                   {!child.medication_authorization && (
                     <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] rounded-lg flex items-start gap-1.5 font-medium leading-normal">
                       <AlertTriangle className="size-4 shrink-0 text-rose-600 mt-0.5" />
                       <div>
-                        Attention : La fiche de l'enfant indique que l'administration de médicaments n'est pas autorisée par les parents.
+                        Attention : L'administration de médicaments n'est pas autorisée pour cet enfant.
                       </div>
                     </div>
                   )}
@@ -840,29 +943,43 @@ export function ChildDetailClient({
               )}
 
               {eventType === "incident" && (
-                <div className="space-y-2 p-3 bg-muted/40 rounded-xl border border-border">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                    Gravité
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { val: "mineur", label: "Mineur 🩹" },
-                      { val: "moyen", label: "Moyen ⚠️" },
-                      { val: "majeur", label: "Majeur 🚨" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.val}
-                        type="button"
-                        onClick={() => setSeverity(opt.val)}
-                        className={`py-2 px-3 text-xs font-semibold rounded-lg border text-center transition-all ${
-                          severity === opt.val
-                            ? "bg-rose-100 border-rose-300 text-rose-800"
-                            : "bg-background border-border text-muted-foreground hover:bg-muted"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                <div className="space-y-3 p-3 bg-muted/40 rounded-xl border border-border">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                      Gravité
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { val: "mineur", label: "Mineur 🩹" },
+                        { val: "moyen", label: "Moyen ⚠️" },
+                        { val: "majeur", label: "Majeur 🚨" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.val}
+                          type="button"
+                          onClick={() => setSeverity(opt.val)}
+                          className={`py-2 px-3 text-xs font-semibold rounded-lg border text-center transition-all ${
+                            severity === opt.val
+                              ? "bg-rose-100 border-rose-300 text-rose-800"
+                              : "bg-background border-border text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Type d'incident (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ex: Chute, Dispute, Morsure..."
+                      value={incidentType}
+                      onChange={(e) => setIncidentType(e.target.value)}
+                      className="w-full text-sm h-9 border border-input rounded-lg px-2.5 outline-none bg-background focus:border-ring"
+                    />
                   </div>
                 </div>
               )}
@@ -881,6 +998,21 @@ export function ChildDetailClient({
                 />
               </div>
 
+              {/* Error/Warning notices for medication */}
+              {eventType === "medicament" && (
+                <div className="mt-1">
+                  {!child.medication_authorization ? (
+                    <p className="text-xs font-bold text-rose-600 text-center leading-normal">
+                      ⚠️ Enregistrement impossible : L'administration de médicaments n'est pas autorisée par les parents.
+                    </p>
+                  ) : !medicationConfirmed ? (
+                    <p className="text-xs font-semibold text-amber-600 text-center leading-normal">
+                      Veuillez cocher la case d'autorisation parentale confirmée.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
               {/* Actions Footer inside modal */}
               <div className="flex gap-3 pt-3 border-t border-border">
                 <SoleilButton
@@ -893,8 +1025,12 @@ export function ChildDetailClient({
                 </SoleilButton>
                 <SoleilButton
                   type="submit"
-                  disabled={isSubmittingEvent}
-                  className="flex-1 bg-soleil-primary hover:bg-soleil-primary/95 text-white rounded-xl font-bold py-2.5"
+                  disabled={
+                    isSubmittingEvent ||
+                    (eventType === "medicament" &&
+                      (!child.medication_authorization || !medicationConfirmed))
+                  }
+                  className="flex-1 bg-soleil-primary hover:bg-soleil-primary/95 text-white rounded-xl font-bold py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isSubmittingEvent ? "Ajout..." : "Enregistrer"}
                 </SoleilButton>
