@@ -453,15 +453,15 @@ export function ChildTimelineClient({
         ) : (
           /* Empty Timeline state */
           <Card className="p-12 text-center border-dashed border-2 border-border/80 rounded-2xl bg-card/60 shadow-none flex flex-col items-center justify-center gap-4">
-            <div className="p-4 bg-muted rounded-full">
-              <Calendar className="size-10 text-soleil-primary/70" />
+            <div className="p-4 bg-soleil-background text-soleil-primary rounded-full">
+              <Calendar className="size-10 text-soleil-primary" />
             </div>
             <div className="space-y-1">
               <h3 className="font-heading font-bold text-lg text-soleil-text">
-                Aucun événement enregistré
+                La journée de {child.first_name} n{"'"}a pas encore commencé
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                La crèche n{"'"}a pas encore partagé d{"'"}activité pour {child.first_name} à cette date ({formattedSelectedDate}).
+                Revenez un peu plus tard pour voir les événements partagés par la crèche aujourd{"'"}hui ou sélectionnez un autre jour.
               </p>
             </div>
           </Card>
