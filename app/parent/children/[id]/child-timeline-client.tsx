@@ -15,6 +15,9 @@ import {
   Clock,
   User,
   Heart,
+  BookOpen,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -467,6 +470,226 @@ export function ChildTimelineClient({
           </Card>
         )}
       </div>
+
+      {/* Livre du Soir component */}
+      <LivreDuSoir childName={child.first_name} />
     </div>
+  );
+}
+
+interface Book {
+  title: string;
+  author: string;
+  coverUrl?: string;
+  publishYear?: number;
+}
+
+const LOCAL_FALLBACK_BOOKS: Book[] = [
+  {
+    title: "La chenille qui fait des trous",
+    author: "Eric Carle",
+    publishYear: 1969,
+  },
+  {
+    title: "Devine combien je t'aime",
+    author: "Sam McBratney",
+    publishYear: 1994,
+  },
+  {
+    title: "Chien Bleu",
+    author: "Nadja",
+    publishYear: 1989,
+  },
+  {
+    title: "Max et les Maximonstres",
+    author: "Maurice Sendak",
+    publishYear: 1963,
+  },
+  {
+    title: "Le Petit Prince",
+    author: "Antoine de Saint-Exupéry",
+    publishYear: 1943,
+  }
+];
+
+interface LivreDuSoirProps {
+  childName: string;
+}
+
+function LivreDuSoir({ childName }: LivreDuSoirProps) {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [isApiFallback, setIsApiFallback] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 5000);
+
+    async function fetchBooks() {
+      try {
+        const response = await fetch(
+          "https://openlibrary.org/search.json?q=album+jeunesse&limit=5",
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error("HTTP error " + response.status);
+        }
+
+        const data = await response.json();
+        const docs = data.docs || [];
+
+        if (docs.length === 0) {
+          throw new Error("No results found");
+        }
+
+        const mappedBooks: Book[] = docs.map((doc: any) => {
+          const author = doc.author_name && doc.author_name.length > 0
+            ? doc.author_name[0]
+            : "Auteur inconnu";
+
+          return {
+            title: doc.title,
+            author: author,
+            coverUrl: doc.cover_i
+              ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+              : undefined,
+            publishYear: doc.first_publish_year,
+          };
+        });
+
+        setBooks(mappedBooks);
+        setIsApiFallback(false);
+      } catch (err: any) {
+        console.warn("Open Library fetch error or timeout, loading local recommendations:", err);
+        setBooks(LOCAL_FALLBACK_BOOKS);
+        setIsApiFallback(true);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchBooks();
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [currentIndex]);
+
+  if (loading) {
+    return (
+      <Card className="p-6 border border-[#EFDFC5] bg-gradient-to-br from-[#FFFBF0] to-[#FFFDF5] rounded-2xl shadow-soleil flex flex-col md:flex-row items-center gap-6 animate-pulse mt-8">
+        <div className="w-28 h-40 bg-muted/60 rounded-lg shrink-0" />
+        <div className="flex-1 space-y-3 w-full">
+          <div className="h-4 bg-muted/60 rounded w-1/4" />
+          <div className="h-6 bg-muted/60 rounded w-3/4" />
+          <div className="h-4 bg-muted/60 rounded w-1/2" />
+          <div className="h-10 bg-muted/60 rounded w-1/3 pt-2" />
+        </div>
+      </Card>
+    );
+  }
+
+  if (books.length === 0) {
+    return null;
+  }
+
+  const currentBook = books[currentIndex];
+  const showCover = currentBook.coverUrl && !imgError;
+
+  const handleNextBook = () => {
+    setCurrentIndex((prev) => (prev + 1) % books.length);
+  };
+
+  return (
+    <Card className="p-6 border border-[#EFDFC5] bg-gradient-to-br from-[#FFFBF0] to-[#FFFDF5] rounded-2xl shadow-soleil mt-8 overflow-hidden relative">
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-soleil-primary via-soleil-accent to-soleil-secondary" />
+
+      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 pt-2">
+        <div className="w-28 sm:w-32 h-40 sm:h-44 shrink-0 transition-transform duration-300 hover:scale-102 flex-none shadow-md rounded-lg overflow-hidden bg-background relative border border-border">
+          {showCover ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={currentBook.coverUrl}
+              alt={currentBook.title}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-full h-full p-3 bg-gradient-to-b from-[#FF8A65] to-[#FFB085] flex flex-col justify-between text-white font-heading">
+              <div className="text-[10px] font-black tracking-widest uppercase opacity-75 text-center">
+                Les Petits Pas 📖
+              </div>
+              <div className="my-auto text-center">
+                <BookOpen className="size-8 mx-auto opacity-90 mb-1" />
+                <div className="text-xs font-extrabold line-clamp-3 leading-tight px-1" title={currentBook.title}>
+                  {currentBook.title}
+                </div>
+              </div>
+              <div className="text-[9px] font-bold line-clamp-1 italic text-center opacity-90">
+                {currentBook.author}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 text-center md:text-left flex flex-col justify-between h-full min-w-0">
+          <div>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-2">
+              <Badge variant="outline" className="bg-[#FF8A65]/10 border-[#FF8A65]/20 text-[#FF8A65] font-black text-[10px] uppercase py-0.5 tracking-wider rounded-full flex items-center gap-1">
+                <Sparkles className="size-3 fill-[#FF8A65]" /> Rituel de l{"'"}histoire du soir
+              </Badge>
+              {isApiFallback && (
+                <Badge variant="secondary" className="bg-muted text-muted-foreground font-semibold text-[9px] py-0.5 rounded-full">
+                  Classique suggéré
+                </Badge>
+              )}
+            </div>
+
+            <h3 className="font-heading text-xl font-bold text-soleil-text leading-tight line-clamp-2" title={currentBook.title}>
+              {currentBook.title}
+            </h3>
+            
+            <p className="text-sm font-bold text-[#795548] mt-1">
+              par <span className="text-[#FF8A65]">{currentBook.author}</span>
+              {currentBook.publishYear && (
+                <span className="text-muted-foreground font-normal text-xs"> ({currentBook.publishYear})</span>
+              )}
+            </p>
+
+            <p className="text-xs sm:text-sm text-soleil-text-muted mt-3 leading-relaxed">
+              Pour conclure la journée de <strong className="text-soleil-text font-bold">{childName}</strong> en toute douceur, avant d{"'"}éteindre la lumière, partagez un calme moment de lecture ensemble. Ce magnifique album est une excellente suggestion pour s{"'"}évader au pays des rêves ! ✨
+            </p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-dashed border-[#EFDFC5] flex flex-wrap gap-2 items-center justify-center md:justify-between w-full">
+            <span className="text-[10px] font-semibold text-muted-foreground italic">
+              📚 Recommandation • Open Library API
+            </span>
+            
+            {books.length > 1 && (
+              <SoleilButton
+                variant="outline"
+                size="sm"
+                onClick={handleNextBook}
+                className="h-8 text-xs font-bold rounded-xl border-[#EFDFC5] text-[#FF8A65] hover:bg-[#FF8A65]/10 gap-1"
+              >
+                <RefreshCw className="size-3.5 animate-spin-hover" /> Voir une autre idée
+              </SoleilButton>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
