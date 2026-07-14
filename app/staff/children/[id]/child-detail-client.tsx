@@ -32,6 +32,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   createEventAction,
   markMessageAsReadAction,
+  attachParentAction,
 } from "@/app/actions/children";
 import type { EventType } from "@/lib/supabase/database.types";
 
@@ -122,6 +123,13 @@ export function ChildDetailClient({
   const [medicationConfirmed, setMedicationConfirmed] = useState(false);
   const [severity, setSeverity] = useState("mineur");
   const [incidentType, setIncidentType] = useState("");
+
+  // Form States for Parent Attachment Modal
+  const [isParentModalOpen, setIsParentModalOpen] = useState(false);
+  const [parentEmail, setParentEmail] = useState("");
+  const [parentFullName, setParentFullName] = useState("");
+  const [isSubmittingParent, setIsSubmittingParent] = useState(false);
+  const [parentSubmitError, setParentSubmitError] = useState<string | null>(null);
 
 
   // Fetch events when date changes
@@ -301,6 +309,49 @@ export function ChildDetailClient({
     }
   };
 
+  const handleAttachParent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingParent(true);
+    setParentSubmitError(null);
+
+    try {
+      const emailVal = parentEmail.trim();
+      const nameVal = parentFullName.trim();
+
+      if (!emailVal || !nameVal) {
+        setParentSubmitError("Tous les champs sont requis.");
+        setIsSubmittingParent(false);
+        return;
+      }
+
+      const response = await attachParentAction({
+        childId: child.id,
+        parentEmail: emailVal,
+        parentFullName: nameVal,
+      });
+
+      if (!response.success) {
+        setParentSubmitError(response.error || "Une erreur est survenue lors de l'enregistrement.");
+        setIsSubmittingParent(false);
+        return;
+      }
+
+      // Success! Clear fields and close modal
+      setParentEmail("");
+      setParentFullName("");
+      setIsParentModalOpen(false);
+
+      // Refresh the page
+      router.refresh();
+      alert("Le parent a été rattaché avec succès et un email d'invitation lui a été envoyé !");
+    } catch (err: any) {
+      console.error(err);
+      setParentSubmitError(err.message || "Une erreur inattendue est survenue.");
+    } finally {
+      setIsSubmittingParent(false);
+    }
+  };
+
   const changeDateByDays = (days: number) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
@@ -445,19 +496,28 @@ export function ChildDetailClient({
               </div>
 
               {/* Parents Section */}
-              <div className="mt-2 text-sm text-muted-foreground flex flex-wrap justify-center md:justify-start gap-1 items-center">
+              <div className="mt-2 text-sm text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2 items-center">
                 <span className="font-medium text-soleil-text-muted">Parents rattachés :</span>
                 {initialParents.length > 0 ? (
                   initialParents.map((parent, index) => (
-                    <span key={parent.id} className="inline-flex items-center gap-1 font-semibold text-soleil-text bg-muted/60 px-2 py-0.5 rounded-full text-xs">
+                    <span key={parent.id} className="inline-flex items-center gap-1 font-semibold text-soleil-text bg-muted/60 px-2 py-0.5 rounded-full text-xs animate-in zoom-in-95 duration-200">
                       <User className="size-3" />
                       {parent.full_name}
-                      {index < initialParents.length - 1 && <span className="text-muted-foreground font-normal">,</span>}
+                      {index < initialParents.length - 1 && <span className="text-muted-foreground font-normal mr-1">,</span>}
                     </span>
                   ))
                 ) : (
-                  <span className="italic">Aucun parent rattaché</span>
+                  <span className="italic mr-1 text-xs">Aucun parent rattaché</span>
                 )}
+                
+                <SoleilButton
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] px-2 rounded-lg text-soleil-primary border-soleil-primary/20 hover:bg-soleil-primary/10 font-bold flex items-center gap-1 cursor-pointer"
+                  onClick={() => setIsParentModalOpen(true)}
+                >
+                  <Plus className="size-3" /> Rattacher un parent
+                </SoleilButton>
               </div>
             </div>
 
@@ -1033,6 +1093,103 @@ export function ChildDetailClient({
                   className="flex-1 bg-soleil-primary hover:bg-soleil-primary/95 text-white rounded-xl font-bold py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isSubmittingEvent ? "Ajout..." : "Enregistrer"}
+                </SoleilButton>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Parent Attachment Modal Overlay */}
+      {isParentModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <Card className="bg-card w-full max-w-md rounded-2xl border border-border shadow-soleil-md overflow-hidden relative animate-in zoom-in-95 duration-200 flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-border bg-background/50 flex justify-between items-center">
+              <div>
+                <h3 className="font-heading text-lg font-bold text-soleil-text">
+                  Rattacher un parent
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Inviter un responsable légal pour {child.first_name}
+                </p>
+              </div>
+              <SoleilButton
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setIsParentModalOpen(false);
+                  setParentSubmitError(null);
+                }}
+                className="rounded-lg"
+              >
+                <X className="size-4" />
+              </SoleilButton>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleAttachParent} className="p-5 space-y-4">
+              {parentSubmitError && (
+                <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-800 rounded-xl font-medium">
+                  {parentSubmitError}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Nom complet du parent
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: Jean Dupont"
+                  value={parentFullName}
+                  onChange={(e) => setParentFullName(e.target.value)}
+                  className="w-full text-sm h-10 border border-input rounded-xl px-3 outline-none bg-background focus:border-soleil-primary/50 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Adresse e-mail
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="ex: jean.dupont@example.com"
+                  value={parentEmail}
+                  onChange={(e) => setParentEmail(e.target.value)}
+                  className="w-full text-sm h-10 border border-input rounded-xl px-3 outline-none bg-background focus:border-soleil-primary/50 transition-colors"
+                  autoCapitalize="off"
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-100 text-[11px] text-soleil-text-muted leading-relaxed">
+                💡 <strong>Invitation automatique :</strong> Si l&apos;adresse e-mail n&apos;a pas de compte existant, un nouveau compte parent sera créé. Un e-mail d&apos;invitation personnalisé contenant un lien sécurisé pour définir son mot de passe lui sera immédiatement envoyé avec l&apos;API Resend.
+              </div>
+
+              {/* Actions Footer inside modal */}
+              <div className="flex gap-3 pt-3 border-t border-border">
+                <SoleilButton
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsParentModalOpen(false);
+                    setParentSubmitError(null);
+                  }}
+                  className="flex-1 rounded-xl font-bold py-2.5"
+                  disabled={isSubmittingParent}
+                >
+                  Annuler
+                </SoleilButton>
+                <SoleilButton
+                  type="submit"
+                  disabled={isSubmittingParent}
+                  className="flex-1 bg-soleil-primary hover:bg-soleil-primary/95 text-white rounded-xl font-bold py-2.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingParent ? "Envoi..." : "Rattacher & Inviter"}
                 </SoleilButton>
               </div>
             </form>

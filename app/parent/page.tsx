@@ -316,15 +316,15 @@ export default async function ParentPage() {
         /* Empty Family State */
         <SoleilCard className="p-12 text-center border-dashed border-2 border-border/80 bg-card/60 flex flex-col items-center justify-center gap-5">
           <div className="p-4 bg-soleil-background text-soleil-primary rounded-full">
-            <Baby className="size-12" />
+            <Baby className="size-12 hover:scale-110 transition-transform duration-200" />
           </div>
           <div className="space-y-2">
             <h3 className="font-heading font-bold text-xl text-soleil-text">
               Bienvenue sur votre espace famille !
             </h3>
-            <p className="text-sm text-soleil-text-muted max-w-sm mx-auto">
+            <p className="text-sm text-soleil-text-muted max-w-sm mx-auto leading-relaxed">
               Il semblerait qu{"'"}aucun enfant ne soit encore rattaché à votre compte. 
-              Veuillez contacter la direction de la crèche pour lier votre profil de parent.
+              Pour lier votre profil de parent et suivre les activités quotidiennes, veuillez contacter chaleureusement la direction de la crèche.
             </p>
           </div>
         </SoleilCard>
