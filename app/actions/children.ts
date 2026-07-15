@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthProfile } from "@/lib/auth/session";
 import type { EventType } from "@/lib/supabase/database.types";
@@ -208,13 +210,15 @@ export async function attachParentAction(input: AttachParentInput) {
       return { success: false, error: "Ce parent est déjà rattaché à cet enfant." };
     }
 
+    const appUrl = getRequiredEnv("NEXT_PUBLIC_APP_URL");
+
     // 6. Generate action link for creating/resetting password
     let linkType: "invite" | "recovery" = isNewUser ? "invite" : "recovery";
     let { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
       type: linkType,
       email: parentEmail,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/parent`,
+        redirectTo: `${appUrl}/parent`,
       },
     });
 
@@ -224,7 +228,7 @@ export async function attachParentAction(input: AttachParentInput) {
         type: "recovery",
         email: parentEmail,
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/parent`,
+          redirectTo: `${appUrl}/parent`,
         },
       });
       linkData = fallback.data;
@@ -242,8 +246,8 @@ export async function attachParentAction(input: AttachParentInput) {
     }
 
     // 7. Send invitation email via Resend
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const resendFromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+    const resendApiKey = getOptionalEnv("RESEND_API_KEY");
+    const resendFromEmail = getOptionalEnv("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
 
     if (!resendApiKey) {
       console.error("Missing RESEND_API_KEY in server environment");
