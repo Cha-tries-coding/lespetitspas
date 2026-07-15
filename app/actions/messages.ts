@@ -1,5 +1,6 @@
 "use server";
 
+import { getOptionalEnv, getRequiredEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthProfile } from "@/lib/auth/session";
 
@@ -71,8 +72,9 @@ export async function createMessageAction(childId: string, content: string) {
 
   // Send an email notification via the Resend API to all staff members
   try {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const resendFromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+    const resendApiKey = getOptionalEnv("RESEND_API_KEY");
+    const resendFromEmail = getOptionalEnv("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+    const appUrl = getRequiredEnv("NEXT_PUBLIC_APP_URL");
 
     if (resendApiKey) {
       // 1. Fetch child first name
@@ -232,7 +234,7 @@ export async function createMessageAction(childId: string, content: string) {
         </div>
 
         <div class="button-container">
-          <a href="${process.env.NEXT_PUBLIC_APP_URL}/staff/messages" class="btn" target="_blank">Consulter les messages</a>
+          <a href="${appUrl}/staff/messages" class="btn" target="_blank">Consulter les messages</a>
         </div>
 
         <p style="margin-bottom: 0;">Belle journée,<br>L&apos;application Les Petits Pas 🧸</p>
